@@ -17,8 +17,9 @@
         <p class="eyebrow sidebar-label">Workspace</p>
         <nav class="nav-list">
           <button class="nav-item active" data-view="dashboard"><span>⌂</span> Overview</button>
-          <button class="nav-item" data-view="directory"><span>◫</span> Units &amp; drivers</button>
+          <button class="nav-item" data-view="directory"><span>◫</span> Unit workspace</button>
           <button class="nav-item" data-view="operations"><span>⌁</span> Operations board <b id="nav-alert-count">0</b></button>
+          <button class="nav-item" data-view="automations"><span>◌</span> Automations</button>
           <button class="nav-item" data-view="integrations"><span>↗</span> Integrations</button>
         </nav>
         <div class="sidebar-footer"><span class="live-dot"></span><div><strong>Prototype mode</strong><small>Local edits only</small></div></div>
@@ -33,8 +34,6 @@
         <div id="app" aria-live="polite"></div>
       </main>
     </div>
-    <aside class="record-drawer" id="record-drawer" aria-label="Unit details" aria-hidden="true"></aside>
-    <div class="drawer-backdrop" id="drawer-backdrop"></div>
     <div class="toast" id="toast" role="status"></div>
     <script type="module" src="app.js"></script>
   </body>

@@ -71,6 +71,21 @@ export function getAttentionRecords(records) {
   return records.filter((record) => record.fuelStatus !== 'Arranged' || record.tollStatus === 'Need review' || record.status === 'Not following instructions');
 }
 
+export function getQuickActions(record) {
+  const actions = [];
+  if (record.fuelStatus !== 'Arranged') actions.push('Mark fuel arranged');
+  if (record.tollStatus === 'Need review') actions.push('Clear toll review');
+  return actions;
+}
+
+export function applyRecordUpdate(record, changes) {
+  return {
+    ...record,
+    ...changes,
+    lastActivity: 'Updated locally',
+  };
+}
+
 export function getInitials(name) {
   return name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 }
