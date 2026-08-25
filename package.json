@@ -1,0 +1,10 @@
+{
+  "name": "fuel-desk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test data.test.js",
+    "check": "node --check app.js && node --check data.js"
+  }
+}
