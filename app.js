@@ -1,7 +1,8 @@
-import { applyRecordUpdate, createMockDataSource, getAttentionRecords, getInitials, getMetrics, getQuickActions } from './data.js';
+import { createApiDataSource, createMockDataSource, getAttentionRecords, getInitials, getMetrics, getQuickActions } from './data.js';
 
 const app = document.querySelector('#app');
-const dataSource = createMockDataSource();
+const demoMode = new URLSearchParams(window.location.search).get('demo') === '1';
+const dataSource = demoMode ? createMockDataSource() : createApiDataSource();
 const state = { records: [], view: 'dashboard', search: '', ownership: 'All ownership', status: 'All fuel states', selectedId: null, rules: [
   { id: 'fuel-follow-up', name: 'Fuel follow-up', when: 'Fuel is not arranged', then: 'Create action item', enabled: true },
   { id: 'toll-review', name: 'Toll review', when: 'Toll needs review', then: 'Mark as priority', enabled: true },
@@ -33,14 +34,14 @@ function table(records) {
 }
 
 function dashboard() {
-  const metrics = getMetrics(state.records); const attention = getAttentionRecords(state.records); const coverage = Math.round(metrics.arranged / metrics.total * 100);
+  const metrics = getMetrics(state.records); const attention = getAttentionRecords(state.records); const coverage = metrics.total ? Math.round(metrics.arranged / metrics.total * 100) : 0;
   return `<section class="view"><div class="page-hero"><div><p class="eyebrow accent-eyebrow">Wednesday, 26 August</p><h2>Fleet overview</h2><p class="lede">Review open items and update units from one place.</p></div><button class="primary-button" data-view="operations">Review action board <span>→</span></button></div><div class="metric-grid">${metric('Open actions', attention.length, 'Units requiring attention', 'danger')}${metric('Fuel ready', `${coverage}%`, `${metrics.arranged} of ${metrics.total} units`, 'good')}${metric('Toll reviews', metrics.tollIssues, 'Awaiting verification', 'warning')}${metric('Driver flags', metrics.complianceIssues, 'Need follow-up', 'warning')}</div><div class="focus-grid"><section class="panel action-panel"><div class="panel-heading"><div><p class="eyebrow">Priority</p><h3>Needs attention</h3></div><button class="text-button" data-view="directory">View all units</button></div><div class="priority-list">${attention.slice(0, 5).map((record) => `<button class="priority-item" data-record-id="${record.id}"><span class="priority-avatar">${initials(record.driver)}</span><span><strong>Unit ${escapeHtml(record.unit)}</strong><small>${escapeHtml(record.driver)} · ${record.fuelStatus !== 'Arranged' ? record.fuelStatus : record.tollStatus}</small></span>${pill(record.fuelStatus !== 'Arranged' ? record.fuelStatus : record.tollStatus)}</button>`).join('')}</div></section><section class="panel health-panel"><div class="panel-heading"><div><p class="eyebrow">Readiness</p><h3>Fleet status</h3></div><span class="score-status">${coverage >= 80 ? 'On track' : 'Review'}</span></div><div class="score-row"><div class="score-number">${coverage}<sup>%</sup></div><div><strong>Fuel coverage</strong><p>Current readiness across the active roster.</p></div></div><div class="progress-track"><span style="width:${coverage}%"></span></div><div class="health-notes"><span><i class="dot green"></i>${metrics.arranged} ready</span><span><i class="dot amber"></i>${metrics.pendingFuel} follow-ups</span></div></section></div></section>`;
 }
 
 function workspace(record) {
-  if (!record) return '<section class="workspace-empty"><span>⌁</span><h3>Select a unit</h3><p>Choose a row to view its status and make a local update.</p></section>';
+  if (!record) return '<section class="workspace-empty"><span>⌁</span><h3>Select a unit</h3><p>Choose a row to view its status and update the shared record.</p></section>';
   const actions = getQuickActions(record);
-  return `<section class="workspace-panel"><div class="workspace-head"><div><p class="eyebrow">Selected unit</p><h3>${escapeHtml(record.unit)}</h3><p>${escapeHtml(record.driver)} · ${escapeHtml(record.ownership)}</p></div><span class="large-avatar">${initials(record.driver)}</span></div><div class="workspace-status"><div><span>Fuel</span>${pill(record.fuelStatus)}</div><div><span>Tolls</span>${pill(record.tollStatus)}</div><div><span>Compliance</span>${pill(record.status)}</div></div><div class="quick-actions"><p class="eyebrow">Quick actions</p>${actions.length ? actions.map((action) => `<button class="quick-action" data-action="${action}" data-unit-id="${record.id}">${action === 'Mark fuel arranged' ? '✓ Mark fuel arranged' : '✓ Clear toll review'}</button>`).join('') : '<p class="clear-message">No operational action is waiting.</p>'}</div><form id="unit-update-form" data-unit-id="${record.id}" class="unit-update-form"><p class="eyebrow">Edit details</p><label>Fuel status<select name="fuelStatus"><option ${record.fuelStatus === 'Arranged' ? 'selected' : ''}>Arranged</option><option ${record.fuelStatus === 'Need to arrange' ? 'selected' : ''}>Need to arrange</option><option ${record.fuelStatus === 'Need to check' ? 'selected' : ''}>Need to check</option></select></label><label>Toll status<select name="tollStatus"><option ${record.tollStatus === 'Arranged' ? 'selected' : ''}>Arranged</option><option ${record.tollStatus === 'Clear' ? 'selected' : ''}>Clear</option><option ${record.tollStatus === 'Need review' ? 'selected' : ''}>Need review</option></select></label><label>Compliance<select name="status"><option ${record.status === 'Cooperative' ? 'selected' : ''}>Cooperative</option><option ${record.status === 'Partially cooperative' ? 'selected' : ''}>Partially cooperative</option><option ${record.status === 'Not following instructions' ? 'selected' : ''}>Not following instructions</option></select></label><label class="notes-field">Operational note<textarea name="notes" rows="3" placeholder="Add a note for the team">${escapeHtml(record.notes)}</textarea></label><button type="submit" class="primary-button full-width">Save local update <span>→</span></button></form><div class="workspace-footnote"><span>Last activity</span><strong>${escapeHtml(record.lastActivity || record.checkInTime)}</strong></div></section>`;
+  return `<section class="workspace-panel"><div class="workspace-head"><div><p class="eyebrow">Selected unit</p><h3>${escapeHtml(record.unit)}</h3><p>${escapeHtml(record.driver)} · ${escapeHtml(record.ownership)}</p></div><span class="large-avatar">${initials(record.driver)}</span></div><div class="workspace-status"><div><span>Fuel</span>${pill(record.fuelStatus)}</div><div><span>Tolls</span>${pill(record.tollStatus)}</div><div><span>Compliance</span>${pill(record.status)}</div></div><div class="quick-actions"><p class="eyebrow">Quick actions</p>${actions.length ? actions.map((action) => `<button class="quick-action" data-action="${action}" data-unit-id="${record.id}">${action === 'Mark fuel arranged' ? '✓ Mark fuel arranged' : '✓ Clear toll review'}</button>`).join('') : '<p class="clear-message">No operational action is waiting.</p>'}</div><form id="unit-update-form" data-unit-id="${record.id}" class="unit-update-form"><p class="eyebrow">Edit details</p><label>Fuel status<select name="fuelStatus"><option ${record.fuelStatus === 'Arranged' ? 'selected' : ''}>Arranged</option><option ${record.fuelStatus === 'Need to arrange' ? 'selected' : ''}>Need to arrange</option><option ${record.fuelStatus === 'Need to check' ? 'selected' : ''}>Need to check</option></select></label><label>Toll status<select name="tollStatus"><option ${record.tollStatus === 'Arranged' ? 'selected' : ''}>Arranged</option><option ${record.tollStatus === 'Clear' ? 'selected' : ''}>Clear</option><option ${record.tollStatus === 'Need review' ? 'selected' : ''}>Need review</option></select></label><label>Compliance<select name="status"><option ${record.status === 'Cooperative' ? 'selected' : ''}>Cooperative</option><option ${record.status === 'Partially cooperative' ? 'selected' : ''}>Partially cooperative</option><option ${record.status === 'Not following instructions' ? 'selected' : ''}>Not following instructions</option></select></label><label class="notes-field">Operational note<textarea name="notes" rows="3" placeholder="Add a note for the team">${escapeHtml(record.notes)}</textarea></label><button type="submit" class="primary-button full-width">Save update <span>→</span></button></form><div class="workspace-footnote"><span>Last activity</span><strong>${escapeHtml(record.lastActivity || record.checkInTime)}</strong></div></section>`;
 }
 
 function directory() {
@@ -58,7 +59,7 @@ function automations() {
 }
 
 function integrations() {
-  return `<section class="view"><div class="page-hero compact"><div><p class="eyebrow accent-eyebrow">Connection blueprint</p><h2>Ready when you are.</h2><p class="lede">This version stays static. Later, one small API can connect the dashboard, Makima watcher, Google Sheets and automations.</p></div></div><section class="panel api-blueprint"><div class="api-icon">⌘</div><div><p class="eyebrow">Future API contract</p><h3>One source of truth for operations</h3><p>Use a protected REST API with an API key. The dashboard and bot will share unit records and rules.</p></div><span class="connection-state"><i></i>No server connection</span></section><div class="endpoint-grid"><article><code>GET /api/units</code><p>Read fleet roster and statuses.</p></article><article><code>PATCH /api/units/:id</code><p>Update fuel, tolls, compliance or notes.</p></article><article><code>GET /api/automations</code><p>Read rules for bot-driven workflows.</p></article></div><div class="integration-footnote"><span>ⓘ</span><p><strong>Nothing external is active.</strong> This build uses no AI, tokens, API keys, or Telegram credentials.</p></div></section>`;
+  return `<section class="view"><div class="page-hero compact"><div><p class="eyebrow accent-eyebrow">Connections</p><h2>One operational source of truth.</h2><p class="lede">The dashboard and Makima use the same protected unit records. Google Sheets remains a future import option.</p></div></div><section class="panel api-blueprint"><div class="api-icon">⌘</div><div><p class="eyebrow">FuelHelper API</p><h3>${demoMode ? 'Demo connection' : 'Connected through the VPS'}</h3><p>The browser uses a protected server-side bridge. The private Bearer token is never sent to JavaScript.</p></div><span class="connection-state"><i></i>${demoMode ? 'Demo mode' : 'API configured'}</span></section><div class="endpoint-grid"><article><code>GET /api/units</code><p>Makima reads the shared fleet roster.</p></article><article><code>PATCH /api/units/:unit</code><p>Dashboard and bot persist status updates.</p></article><article><code>GET /api/health</code><p>Checks API availability without exposing data.</p></article></div><div class="integration-footnote"><span>ⓘ</span><p><strong>No AI usage.</strong> These are ordinary database requests and do not consume AI tokens.</p></div></section>`;
 }
 
 function render() {
@@ -69,20 +70,55 @@ function render() {
   app.innerHTML = ({ dashboard, directory, operations, automations, integrations })[state.view]();
 }
 
-function updateRecord(id, changes, message) {
-  state.records = state.records.map((record) => record.id === id ? applyRecordUpdate(record, changes) : record);
-  state.selectedId = id; render(); showToast(message);
+async function updateRecord(id, changes, message) {
+  const current = getRecord(id);
+  if (!current) return;
+  setConnectionState('syncing', 'Saving');
+  try {
+    const updated = await dataSource.updateRecord(current.unit, changes);
+    state.records = state.records.map((record) => record.id === id ? updated : record);
+    state.selectedId = updated.id;
+    render();
+    setConnectionState('ready', demoMode ? 'Demo mode' : 'Synced');
+    showToast(message);
+  } catch (error) {
+    setConnectionState('error', 'Save failed');
+    showToast(error.message);
+  }
 }
 
 function showToast(message) { const toast = document.querySelector('#toast'); toast.textContent = message; toast.classList.add('show'); window.setTimeout(() => toast.classList.remove('show'), 2200); }
 
+function setConnectionState(kind, detail) {
+  const label = document.querySelector('#sync-label');
+  const detailNode = document.querySelector('#sync-detail');
+  if (!label || !detailNode) return;
+  label.className = `sync-label ${kind}`;
+  detailNode.textContent = detail;
+}
+
+async function reloadRecords(showMessage = false) {
+  setConnectionState('syncing', 'Refreshing');
+  try {
+    state.records = await dataSource.getRecords();
+    if (state.selectedId && !getRecord(state.selectedId)) state.selectedId = null;
+    render();
+    setConnectionState('ready', demoMode ? 'Demo mode' : 'Synced');
+    if (showMessage) showToast(demoMode ? 'Demo data reloaded' : 'Fleet data refreshed');
+  } catch (error) {
+    setConnectionState('error', 'Offline');
+    if (state.records.length) showToast(error.message);
+    else app.innerHTML = `<div class="error-state"><strong>Could not connect to FuelHelper.</strong><p>${escapeHtml(error.message)}</p><p>Use <code>?demo=1</code> only for a local preview.</p></div>`;
+  }
+}
+
 document.addEventListener('click', (event) => {
   const view = event.target.closest('[data-view]'); if (view) { state.view = view.dataset.view; document.querySelector('.sidebar').classList.remove('mobile-open'); render(); return; }
-  const action = event.target.closest('[data-action]'); if (action) { updateRecord(action.dataset.unitId, action.dataset.action === 'Mark fuel arranged' ? { fuelStatus: 'Arranged' } : { tollStatus: 'Clear' }, action.dataset.action === 'Mark fuel arranged' ? 'Fuel marked arranged locally' : 'Toll review cleared locally'); return; }
+  const action = event.target.closest('[data-action]'); if (action) { updateRecord(action.dataset.unitId, action.dataset.action === 'Mark fuel arranged' ? { fuelStatus: 'Arranged' } : { tollStatus: 'Clear' }, action.dataset.action === 'Mark fuel arranged' ? 'Fuel marked arranged' : 'Toll review cleared'); return; }
   const record = event.target.closest('[data-record-id]'); if (record) { state.selectedId = record.dataset.recordId; state.view = 'directory'; render(); return; }
   const rule = event.target.closest('[data-rule-id]'); if (rule) { state.rules = state.rules.map((item) => item.id === rule.dataset.ruleId ? { ...item, enabled: !item.enabled } : item); render(); return; }
   if (event.target.closest('#reset-filters')) { state.search = ''; state.ownership = 'All ownership'; state.status = 'All fuel states'; render(); }
-  if (event.target.closest('#refresh-button')) showToast('Local sample data is up to date');
+  if (event.target.closest('#refresh-button')) reloadRecords(true);
   if (event.target.closest('#mobile-menu')) document.querySelector('.sidebar').classList.toggle('mobile-open');
 });
 
@@ -90,9 +126,14 @@ document.addEventListener('input', (event) => { if (event.target.id === 'search-
 document.addEventListener('change', (event) => { if (event.target.id === 'ownership-filter') { state.ownership = event.target.value; render(); } if (event.target.id === 'status-filter') { state.status = event.target.value; render(); } });
 document.addEventListener('submit', (event) => {
   event.preventDefault(); const form = new FormData(event.target);
-  if (event.target.id === 'unit-update-form') updateRecord(event.target.dataset.unitId, { fuelStatus: form.get('fuelStatus'), tollStatus: form.get('tollStatus'), status: form.get('status'), notes: form.get('notes') }, 'Unit updated locally');
+  if (event.target.id === 'unit-update-form') updateRecord(event.target.dataset.unitId, { fuelStatus: form.get('fuelStatus'), tollStatus: form.get('tollStatus'), status: form.get('status'), notes: form.get('notes') }, 'Unit updated');
   if (event.target.id === 'automation-form') { state.rules.push({ id: `rule-${Date.now()}`, name: form.get('name'), when: form.get('when'), then: form.get('then'), enabled: true }); render(); showToast('Local automation added'); }
 });
 
-async function boot() { app.innerHTML = '<div class="loading-state"><span class="spinner"></span> Loading local fleet data...</div>'; try { state.records = await dataSource.getRecords(); render(); } catch (error) { app.innerHTML = `<div class="error-state"><strong>Could not load fleet data.</strong><p>${escapeHtml(error.message)}</p></div>`; } }
+async function boot() {
+  app.innerHTML = `<div class="loading-state"><span class="spinner"></span> Loading ${demoMode ? 'demo' : 'shared'} fleet data...</div>`;
+  document.querySelector('#workspace-mode').textContent = demoMode ? 'Demo workspace' : 'Shared workspace';
+  document.querySelector('#workspace-detail').textContent = demoMode ? 'Changes reset on reload' : 'Makima + dashboard';
+  await reloadRecords();
+}
 boot();

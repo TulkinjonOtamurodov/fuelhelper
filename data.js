@@ -49,10 +49,17 @@ export const mockRecords = seedRows.map(([unit, driver, notes, ownership, status
 }));
 
 export function createMockDataSource() {
+  let records = structuredClone(mockRecords);
   return {
     name: 'Local prototype data',
     async getRecords() {
-      return structuredClone(mockRecords);
+      return structuredClone(records);
+    },
+    async updateRecord(unitNumber, changes) {
+      const index = records.findIndex((record) => record.unit === unitNumber);
+      if (index < 0) throw new Error(`Unit ${unitNumber} was not found`);
+      records[index] = applyRecordUpdate(records[index], changes);
+      return structuredClone(records[index]);
     },
   };
 }
@@ -69,6 +76,81 @@ export function getMetrics(records) {
 
 export function getAttentionRecords(records) {
   return records.filter((record) => record.fuelStatus !== 'Arranged' || record.tollStatus === 'Need review' || record.status === 'Not following instructions');
+}
+
+const apiFieldMap = {
+  driver: 'driver',
+  notes: 'notes',
+  ownership: 'ownership',
+  status: 'status',
+  fuelStatus: 'fuel_status',
+  tolls: 'tolls',
+  tollStatus: 'toll_status',
+  checkInTime: 'check_in_time',
+};
+
+export function mapApiUnit(unit) {
+  return {
+    id: `unit-${unit.unit_number}`,
+    unit: unit.unit_number,
+    driver: unit.driver ?? '',
+    notes: unit.notes ?? '',
+    ownership: unit.ownership ?? '',
+    status: unit.status ?? '',
+    fuelStatus: unit.fuel_status ?? '',
+    tolls: unit.tolls ?? '',
+    tollStatus: unit.toll_status ?? '',
+    checkInTime: unit.check_in_time ?? '',
+    lastActivity: unit.updated_at ?? unit.created_at ?? '',
+  };
+}
+
+export function toApiPatch(changes) {
+  return Object.fromEntries(Object.entries(changes)
+    .filter(([field]) => field in apiFieldMap)
+    .map(([field, value]) => [apiFieldMap[field], value]));
+}
+
+async function readJson(response) {
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const detail = typeof payload?.detail === 'string' ? payload.detail : `FuelHelper API request failed (${response.status})`;
+    throw new Error(detail);
+  }
+  return payload;
+}
+
+export function createApiDataSource({ baseUrl = '/dashboard-api', fetchImpl = globalThis.fetch } = {}) {
+  const request = async (path, options = {}) => readJson(await fetchImpl(`${baseUrl}${path}`, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      Accept: 'application/json',
+      ...options.headers,
+    },
+  }));
+
+  return {
+    name: 'FuelHelper API',
+    async getRecords() {
+      const units = await request('/units');
+      return units.map(mapApiUnit);
+    },
+    async updateRecord(unitNumber, changes) {
+      const unit = await request(`/units/${encodeURIComponent(unitNumber)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toApiPatch(changes)),
+      });
+      return mapApiUnit(unit);
+    },
+  };
 }
 
 export function getQuickActions(record) {
